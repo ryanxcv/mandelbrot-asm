@@ -1,17 +1,10 @@
 ; vim: ft=nasm
 
-%use ifunc
+%define MAX_ITERS 128
 
 ; graphics mode 13h
 %define WIDTH  320
 %define HEIGHT 200
-
-; user-defined
-%define PALETTE_SIZE 16
-%define MAX_ITERS    64
-
-; auto-generated palette normalization
-%define PALETTE_SHIFT (ilog2e(MAX_ITERS) - ilog2e(PALETTE_SIZE))
 
 ; register variables
 %define z xmm6
@@ -28,16 +21,12 @@ org 0x7c00
 	pop es
 
 	; enable SSE
-	; mov eax, cr0 ; disabling CPU exceptions unnecessary?
-	; and ax, 0xfffb
-	; or ax, 2
-	; mov cr0, eax
 	mov eax, cr4
-	or ax, 1<<9 ; previously 3<<9, 2<<9 bit unnecessary?
+	or ax, 1<<9
 	mov cr4, eax
 
 	; init position multipliers
-	mov eax, WIDTH/3
+	mov eax,  WIDTH/3
 	mov ebx, HEIGHT/2
 	cvtsi2ss xmm0, eax
 	cvtsi2ss xmm1, ebx
@@ -45,29 +34,22 @@ org 0x7c00
 	movss [mults.hi], xmm1
 
 init_palette:
-	;mov dx, 0x3c6 ; palette mask
-	;mov al, 0xff  ; mask all
-	;out dx, al
-	mov dx, 0x3c8 ; palette index port
+	mov dx, 3c8h ; palette index port
 	mov al, 0
 	out dx, al
+	mov dx, 3c9h ; palette data port
+	times 3 out dx, al
 
-	mov dx, 0x3c9 ; palette data port
-	out dx, al
-	out dx, al
-	out dx, al
-
-	mov cx, 255
+	mov cl, 0xff
 	mov bl, 0
-.loop:
-	mov al, bl
+.color:
+	mov al, cl
 	out dx, al
 	out dx, al
-
-	or ax, cx
+	or  al, bl
 	out dx, al
 	inc bl
-	loop .loop
+	loop .color
 
 draw:
 	; loop over pixels
@@ -75,51 +57,42 @@ draw:
 .cols:
 	mov dword [y], HEIGHT-1
 .rows:
-	; calculate c from screen position
-	; c = a + bi
-	; a = x /  (WIDTH/3) - 2
-	; b = y / (HEIGHT/2) - 1
+	; convert pixel position to complex coords
 	cvtpi2ps c, [pos]
 	divps    c, [mults]
 	subps    c, [offs]
 
 	; z := c
 	movaps z, c
-	xor ecx, ecx
+	mov cl, MAX_ITERS
 .iter:
 	; z := z*z + c
 	xorps   xmm0, xmm0
 	movlhps z,    xmm0
 	movaps  xmm1, z
-	shufps  z,    z,    00010100b ; z    =  a, b
-	shufps  xmm1, xmm1, 01110000b ; xmm1 =  a, a
-	movhlps xmm2, z               ; xmm2 =  b, a
-	movhlps xmm3, xmm1            ; xmm3 = -b, b
+	shufps  z,    z,    14h ; z    =  a, b
+	shufps  xmm1, xmm1, 70h ; xmm1 =  a, a
+	movhlps xmm2, z         ; xmm2 =  b, a
+	movhlps xmm3, xmm1      ; xmm3 = -b, b
 	subss   xmm3, xmm2
 
-	mulps   z,    xmm1            ; z    =  aa, ba
-	mulps   xmm2, xmm3            ; xmm2 = -bb, ab
+	mulps   z,    xmm1      ; z    =  aa, ba
+	mulps   xmm2, xmm3      ; xmm2 = -bb, ab
 
-	addps   z,    xmm2            ; z = aa-bb, ab+ab
+	addps   z,    xmm2      ; z = aa-bb, ab+ab
 	addps   z,    c
-	; break if abs(z) exceeds 4
-	ucomiss z, [four]
-	jz .pixel
-	inc ecx
-	cmp ecx, MAX_ITERS
-	jl .iter
+	cvtss2si eax, z         ; break if abs(z) exceeds 5
+	cmp eax, 4
+	jge .pixel
+	loop .iter
 .done:
 	dec dword [y]
 	jge .rows
 	dec dword [x]
 	jge .cols
-
 	hlt
 
 .pixel:
-	; normalize iterations to palette range
-	;shr cx, PALETTE_SHIFT
-	;or cl, 0x20 ; base offset in palette
 	mov eax, WIDTH
 	mov ebx, [y]
 	mul ebx
@@ -134,15 +107,13 @@ mults:
 .hi dd 0
 
 offs:
-.lo dd 2.0
-.hi dd 1.0
+	dd 2.
+	dd 1.
 
 ; screen position
 pos:
 x dd 0
 y dd 0
-
-four dd 4.0
 
 ; padding and bootsector magic number
 times 510-($-$$) db 0
