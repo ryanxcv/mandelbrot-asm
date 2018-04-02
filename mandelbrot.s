@@ -9,8 +9,10 @@
 %define FHEIGHT 200.
 
 ; register variables
-%define c xmm6 ; complex coordinate
-%define z xmm7 ; iterated variable
+%define ca xmm4 ; complex coordinate
+%define cb xmm5
+%define za xmm6 ; iterated variable
+%define zb xmm7
 
 bits 16
 org 0x7c00
@@ -42,8 +44,7 @@ init_palette:
 	mov bl, 0
 .color:
 	mov al, cl
-	out dx, al
-	out dx, al
+	times 2 out dx, al
 	add al, bl
 	out dx, al
 	inc bl
@@ -62,36 +63,46 @@ draw:
 .rows:
 	; convert pixel position to complex coords
 	mov eax, WIDTH
-	cvtsi2ss c, ecx
-	movlhps  c, c
-	cvtsi2ss c, eax
-	mulps    c, [scale]
-	subps    c, [offs]
+	cvtsi2ss ca, eax
+	cvtsi2ss xmm0, ecx
+	movlhps  ca, xmm0
+	mulps    ca, [scale]
+	subps    ca, [offs]
+	movhlps  cb, ca
 
 	push ecx
 	mov ecx, WIDTH
 .cols:
 	; z := c
-	movaps z, c
+	movss za, ca
+	movss zb, cb
 	push ecx
 	mov ecx, MAX_ITERS
 .iter:
 	; z := z*z + c
-	movhlps xmm0, z
-	mulss   xmm0, z
-	addss   xmm0, xmm0 ; xmm0 = 2ab
-	mulps   z, z
-	movhlps xmm1, z
-	subps   z, xmm1    ; z = a^2 - b^2
-	movlhps z, xmm0
-	addps   z, c
+	movss xmm0, zb
+	mulss zb,   za
+	addss zb,   zb   ; b = 2ab
+	mulss za,   za
+	mulss xmm0, xmm0
+	subss za,   xmm0 ; a = a^2 - b^2
 
-	ucomiss z, [four]       ; break if abs(z) exceeds 4
+	;movlhps za, zb
+	;mulss   zb, za
+	;addss   zb, zb   ; b = 2ab
+	;mulps   za, za
+	;movhlps xmm0, za
+	;subss   za, xmm0 ; a = a^2 - b^2
+
+	addss za, ca
+	addss zb, cb
+
+	ucomiss za, [four] ; break if abs(z) exceeds 4
 	ja .putpixel
 	loop .iter
 .done:
 	dec ebx
-	subss c, [scale]
+	subss ca, [scale.a]
 	pop ecx
 	loop .cols
 	pop ecx
@@ -106,11 +117,11 @@ draw:
 	ret
 
 align 16
-dim   dd FWIDTH, 1., FHEIGHT, 1.
-offs  dd 2., 0, 1., 0
-scale dd 3., 0
-.y    dd 2., 0
-four  dd 4.
+dim  dd FWIDTH, 1., FHEIGHT, 1.
+offs dd 2., 0, 1., 0
+scale:
+.a   dd 3., 0, 2., 0
+four dd 4.
 
 ; padding and bootsector magic number
 times 510-($-$$) db 0
