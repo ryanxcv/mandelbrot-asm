@@ -50,11 +50,9 @@ init_palette:
 	loop .color
 
 	; scaling factor
-	movlps xmm0, [scale]
+	movaps xmm0, [scale]
 	divps  xmm0, [dim]
-	movlps [scale], xmm0
-
-	xorps   xmm0, xmm0
+	movaps [scale], xmm0
 
 draw:
 	; loop over pixels
@@ -65,9 +63,8 @@ draw:
 	; convert pixel position to complex coords
 	mov eax, WIDTH
 	cvtsi2ss c, ecx
-	unpcklps c, c
+	movlhps  c, c
 	cvtsi2ss c, eax
-
 	mulps    c, [scale]
 	subps    c, [offs]
 
@@ -80,17 +77,15 @@ draw:
 	mov ecx, MAX_ITERS
 .iter:
 	; z := z*z + c
-	movsd   xmm0, z
-	shufps  z,    z,    14h ; z    =  a, b
-	shufps  xmm0, xmm0, 60h ; xmm0 =  a, a
-	movhlps xmm1, z         ; xmm1 =  b, a
-	movhlps xmm2, xmm0      ; xmm2 = -b, b
-	subss   xmm2, xmm1
+	movhlps xmm0, z
+	mulss   xmm0, z
+	addss   xmm0, xmm0 ; xmm0 = 2ab
+	mulps   z, z
+	movhlps xmm1, z
+	subps   z, xmm1    ; z = a^2 - b^2
+	movlhps z, xmm0
+	addps   z, c
 
-	mulps   z,    xmm0      ; z    =  aa, ba
-	mulps   xmm1, xmm2      ; xmm1 = -bb, ab
-	addps   z,    xmm1      ; z = aa-bb, ab+ab
-	addps   z,    c
 	ucomiss z, [four]       ; break if abs(z) exceeds 4
 	ja .putpixel
 	loop .iter
@@ -111,10 +106,10 @@ draw:
 	ret
 
 align 16
-dim   dd FWIDTH, FHEIGHT, 0, 0
-offs  dd 2., 1., 0, 0
-scale dd 3., 2., 0, 0
-start dd 1., 1., 0, 0
+dim   dd FWIDTH, 1., FHEIGHT, 1.
+offs  dd 2., 0, 1., 0
+scale dd 3., 0
+.y    dd 2., 0
 four  dd 4.
 
 ; padding and bootsector magic number
