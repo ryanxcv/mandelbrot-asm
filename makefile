@@ -1,5 +1,8 @@
+default: qemu
+b: bochs
 bochs: bochssrc.txt boot.bin
 	bochs -f $<
+q: qemu
 qemu: boot.bin
 	qemu-system-x86_64 $<
 boot.bin: mandelbrot.s

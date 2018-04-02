@@ -54,6 +54,8 @@ init_palette:
 	divps  xmm0, [dim]
 	movlps [scale], xmm0
 
+	xorps   xmm0, xmm0
+
 draw:
 	; loop over pixels
 	mov ebx, HEIGHT*WIDTH-1
@@ -78,7 +80,6 @@ draw:
 	mov ecx, MAX_ITERS
 .iter:
 	; z := z*z + c
-	xorps xmm0, xmm0
 	movsd   xmm0, z
 	shufps  z,    z,    14h ; z    =  a, b
 	shufps  xmm0, xmm0, 60h ; xmm0 =  a, a
@@ -90,9 +91,8 @@ draw:
 	mulps   xmm1, xmm2      ; xmm1 = -bb, ab
 	addps   z,    xmm1      ; z = aa-bb, ab+ab
 	addps   z,    c
-	cvtss2si eax, z         ; break if abs(z) exceeds 4
-	cmp eax, 4
-	jge .putpixel
+	ucomiss z, [four]       ; break if abs(z) exceeds 4
+	ja .putpixel
 	loop .iter
 .done:
 	dec ebx
@@ -115,7 +115,7 @@ dim   dd FWIDTH, FHEIGHT, 0, 0
 offs  dd 2., 1., 0, 0
 scale dd 3., 2., 0, 0
 start dd 1., 1., 0, 0
-sto dq 0xffffffff
+four  dd 4.
 
 ; padding and bootsector magic number
 times 510-($-$$) db 0
