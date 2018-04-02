@@ -1,0 +1,6 @@
+romimage: file=/usr/share/bochs/BIOS-bochs-latest
+vgaromimage: file=/usr/share/bochs/VGABIOS-lgpl-latest
+floppya: 1_44="boot.bin", status=inserted
+boot: a
+cpu: model=p4_willamette
+floppy_bootsig_check: disabled=0

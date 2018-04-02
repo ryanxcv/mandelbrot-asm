@@ -11,8 +11,6 @@
 ; register variables
 %define c xmm6 ; complex coordinate
 %define z xmm7 ; iterated variable
-%define px edi ; screen pixel x
-%define py esi ; screen pixel y
 
 bits 16
 org 0x7c00
@@ -24,9 +22,13 @@ org 0x7c00
 	push 0xa000
 	pop es
 
+	mov eax, cr0
+	and ax, 0xFFFB ; clear coprocessor emulation cr0.EM
+	or ax, 0x2     ; set coprocessor monitoring  cr0.MP
+	mov cr0, eax
 	; enable SSE
 	mov eax, cr4
-	or ax, 1<<9
+	or ax, 3<<9
 	mov cr4, eax
 
 init_palette:
@@ -36,7 +38,7 @@ init_palette:
 	mov dx, 3c9h ; palette data port
 	times 3 out dx, al
 
-	mov cl, 0xff
+	mov ecx, 0xff
 	mov bl, 0
 .color:
 	mov al, cl
@@ -51,24 +53,32 @@ init_palette:
 	movlps xmm0, [scale]
 	divps  xmm0, [dim]
 	movlps [scale], xmm0
+
 draw:
 	; loop over pixels
-	mov px, WIDTH
-.cols:
-	mov py, HEIGHT
+	mov ebx, HEIGHT*WIDTH-1
+	mov ecx, HEIGHT
+
 .rows:
 	; convert pixel position to complex coords
-	cvtsi2ss c, py
+	mov eax, WIDTH
+	cvtsi2ss c, ecx
 	unpcklps c, c
-	cvtsi2ss c, px
+	cvtsi2ss c, eax
+
 	mulps    c, [scale]
 	subps    c, [offs]
 
+	push ecx
+	mov ecx, WIDTH
+.cols:
 	; z := c
 	movaps z, c
-	mov cl, MAX_ITERS
+	push ecx
+	mov ecx, MAX_ITERS
 .iter:
 	; z := z*z + c
+	xorps xmm0, xmm0
 	movsd   xmm0, z
 	shufps  z,    z,    14h ; z    =  a, b
 	shufps  xmm0, xmm0, 60h ; xmm0 =  a, a
@@ -85,24 +95,27 @@ draw:
 	jge .putpixel
 	loop .iter
 .done:
-	dec py
-	jge .rows
-	dec px
-	jge .cols
+	dec ebx
+	subss c, [scale]
+	pop ecx
+	loop .cols
+	pop ecx
+	loop .rows
+
 	hlt
 
 .putpixel:
-	mov eax, WIDTH
-	mul py
-	add eax, px
-	mov [es:eax], cl
+	add cl, 1
+	mov [es:ebx], cl
 	jmp .done
 	ret
 
-align 8
-dim   dd FWIDTH, FHEIGHT
-offs  dd 2., 1.
+align 16
+dim   dd FWIDTH, FHEIGHT, 0, 0
+offs  dd 2., 1., 0, 0
 scale dd 3., 2., 0, 0
+start dd 1., 1., 0, 0
+sto dq 0xffffffff
 
 ; padding and bootsector magic number
 times 510-($-$$) db 0
