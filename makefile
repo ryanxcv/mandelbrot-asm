@@ -8,4 +8,4 @@ qemu: boot.bin
 boot.bin: mandelbrot.s check.s
 	nasm -f bin -o $@ $<
 objdump: boot.bin
-	objdump -D -m i386 -b binary $<
+	objdump -D -m i386 -M addr16,data16 -b binary $<
