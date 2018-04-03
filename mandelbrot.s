@@ -95,15 +95,16 @@ loop_x:
 	hlt
 
 .draw:
-	add cl, 128
 	mov [es:ebx], cl
 	jmp .done
 	ret
 
 maxa:
-maxb  dd 1.
+maxb:
+one  dd 1.
 pixsz dd 0.01 ; coordheight / screenheight = 2 / 200
-limit dd 4.
+limit:
+four dd 4.
 
 ; padding and bootsector magic number
 times 510-($-$$) db 0
