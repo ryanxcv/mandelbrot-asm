@@ -59,6 +59,10 @@ loop_y:
 	mov x, WIDTH
 	movss ca, [maxa]
 loop_x:
+
+; skip points in main cardioid or bulb
+%include "check.s"
+
 	; z := c
 	movss za, ca
 	movss zb, cb
