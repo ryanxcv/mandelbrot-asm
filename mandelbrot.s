@@ -73,15 +73,17 @@ loop_x:
 	movss xmm0, zb
 	mulss xmm0, xmm0
 	mulss zb, za
-	addss zb, zb   ; b = 2ab
 	mulss za, za
-	subss za, xmm0 ; a = a^2 - b^2
+	addss za, xmm0 ; a = a^2 + b^2
+	ucomiss za, [limit]
+	jae .draw
+
+	addss zb, zb   ; b = 2ab
+	times 2 subss za, xmm0
 
 	addss za, ca
 	addss zb, cb
 
-	ucomiss za, [limit]
-	jae .draw
 	loop .iter
 .done:
 	dec pos
